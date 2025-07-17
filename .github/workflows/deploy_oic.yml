@@ -1,9 +1,20 @@
-name: Deploy OIC Integrations to Dev (Committed Files Only)
+name: Deploy OIC Integrations to Dev (Manual or Committed Files)
 
 on:
   push:
     branches:
-      - develop # This workflow will run whenever code is pushed to the 'develop' branch
+      - develop # Still triggers on push to 'develop' branch (for automated deployment of committed files)
+  workflow_dispatch: # This enables manual triggering from GitHub UI
+    inputs:
+      iar_files_list:
+        description: 'Comma-separated list of .iar file paths (e.g., integrations/file1.iar,integrations/file2.iar). Overrides other inputs.'
+        required: false
+        type: string
+      iar_directory:
+        description: 'Path to a directory containing .iar files (e.g., integrations/). Scans this directory.'
+        required: false
+        type: string
+      # You could add more inputs here, e.g., for specific OIC_INSTANCE_NAME override for manual runs
 
 jobs:
   deploy:
@@ -11,69 +22,79 @@ jobs:
 
     steps:
       - name: Checkout repository
-        # Checks out your repository code onto the runner.
-        # fetch-depth: 0 is crucial to get the full commit history for git diff.
+        # fetch-depth: 0 is crucial if the workflow might fall back to detecting committed files.
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Get committed .iar files
+      - name: Get .iar files for deployment
         id: get_iar_files # Assign an ID to this step to access its outputs
         run: |
-          echo "Detecting .iar files committed in this push..."
+          IAR_FILES_TO_DEPLOY=""
           
-          # Get the list of files changed in the current push.
-          # github.event.before is the commit SHA before the push.
-          # github.sha is the SHA of the latest commit in the push.
-          # This command lists all files added, modified, or deleted between these two points.
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          # Prioritize manual input for specific files (from workflow_dispatch)
+          if [[ -n "${{ github.event.inputs.iar_files_list }}" ]]; then
+            echo "Manual input: Using specific .iar files from 'iar_files_list'."
+            IAR_FILES_TO_DEPLOY="${{ github.event.inputs.iar_files_list }}"
           
-          # Filter for .iar files and join them with commas.
-          # Initialize an empty string for the list of .iar files.
-          IAR_FILES_LIST=""
-          
-          # Loop through each changed file
-          for file in $CHANGED_FILES; do
-            # Check if the file ends with .iar (case-insensitive check for robustness)
-            if [[ "${file,,}" == *.iar ]]; then # ${file,,} converts to lowercase
-              # Append the file path to the list, adding a comma if it's not the first file
-              if [[ -n "$IAR_FILES_LIST" ]]; then
-                IAR_FILES_LIST+=","
-              fi
-              IAR_FILES_LIST+="$file"
+          # Second priority: Manual input for a directory (from workflow_dispatch)
+          elif [[ -n "${{ github.event.inputs.iar_directory }}" ]]; then
+            echo "Manual input: Scanning directory '${{ github.event.inputs.iar_directory }}' for .iar files."
+            # Use find command to get all .iar files in the specified directory.
+            # -type f: only files
+            # -name "*.iar": files ending with .iar (case-insensitive)
+            # -print0: null-terminated output for safety with spaces in filenames
+            # xargs -0: reads null-terminated input
+            # tr '\n' ',' | sed 's/,$//': converts newlines to commas and removes trailing comma
+            IAR_FILES_TO_DEPLOY=$(find "${{ github.event.inputs.iar_directory }}" -type f -iname "*.iar" -print0 | xargs -0 | tr '\n' ',' | sed 's/,$//')
+            
+            if [[ -z "$IAR_FILES_TO_DEPLOY" ]]; then
+              echo "No .iar files found in directory '${{ github.event.inputs.iar_directory }}'."
             fi
-          done
+
+          # Fallback: If no manual input, use committed files (original 'push' event logic)
+          else
+            echo "No manual input provided. Detecting .iar files committed in this push."
+            # This relies on fetch-depth: 0 in the checkout step.
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+            
+            for file in $CHANGED_FILES; do
+              if [[ "${file,,}" == *.iar ]]; then # ${file,,} converts to lowercase
+                if [[ -n "$IAR_FILES_TO_DEPLOY" ]]; then
+                  IAR_FILES_TO_DEPLOY+=","
+                fi
+                IAR_FILES_TO_DEPLOY+="$file"
+              fi
+            done
+            
+            if [[ -z "$IAR_FILES_TO_DEPLOY" ]]; then
+              echo "No .iar files were committed in this push."
+            fi
+          fi
           
-          echo "Detected .iar files in commit: $IAR_FILES_LIST"
-          
+          echo "Final list of .iar files for deployment: $IAR_FILES_TO_DEPLOY"
           # Set the list of .iar files as an output of this step.
-          # This output can then be accessed by subsequent steps.
-          echo "iar_files_to_deploy=$IAR_FILES_LIST" >> $GITHUB_OUTPUT
+          echo "iar_files_to_deploy=$IAR_FILES_TO_DEPLOY" >> $GITHUB_OUTPUT
 
       - name: Check if any .iar files were found
         # This step conditionally runs based on whether any .iar files were detected.
         # If no .iar files, the workflow will succeed without attempting deployment.
         if: steps.get_iar_files.outputs.iar_files_to_deploy == ''
         run: |
-          echo "No .iar files were committed in this push. Skipping OIC deployment."
-          # exit 0 ensures the job succeeds even if no .iar files are found.
-          exit 0
+          echo "No .iar files were found for deployment. Skipping OIC deployment."
+          exit 0 # Exit successfully if nothing to deploy
 
       - name: Set up Python
-        # Installs Python on the runner.
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x' # Use a specific Python version, e.g., '3.9', '3.10', '3.11'
+          python-version: '3.x'
 
       - name: Install Python dependencies
-        # Installs the 'requests' library required by your script.
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
       - name: Deploy OIC Integrations
-        # This step executes your Python script.
-        # Environment variables are passed from GitHub Secrets and step outputs.
         env:
           OIC_URL: ${{ secrets.OIC_URL }}
           # Pass the dynamically determined comma-separated list of .iar files.
