@@ -106,6 +106,6 @@ jobs:
           OIC_INSTANCE_NAME: ${{ secrets.OIC_INSTANCE_NAME }}
           OIC_ENABLE_ASYNC_ACTIVATION: ${{ secrets.OIC_ENABLE_ASYNC_ACTIVATION }}
           OIC_FALLBACK_BEARER_TOKEN: ${{ secrets.OIC_FALLBACK_BEARER_TOKEN }}
-        run: python deploy_03.py
+        run: python deploy_v3.py
         # Adjust the path to your script if it's not in the root of the repository.
         # e.g., run: python scripts/deploy_oic_integration.py
