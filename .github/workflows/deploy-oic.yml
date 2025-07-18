@@ -2,7 +2,7 @@
 # This reusable workflow handles the common logic for deploying OIC integrations.
 # It can be called by other workflows to deploy to different environments.
 
-name: CHILD: Deploy OIC Integrations Reusable
+name: CHILD Deploy OIC Integrations Reusable
 
 # Define the inputs and secrets that this reusable workflow expects.
 # These will be passed from the calling workflow.
@@ -59,50 +59,80 @@ jobs:
       - name: Get .iar files for deployment
         id: get_iar_files # Assign an ID to this step to access its outputs later.
         run: |
+          # Enable shell debugging to see executed commands
+          set -x
+
+          echo "--- Debugging .iar file detection ---"
+          echo "github.event_name: ${{ github.event_name }}"
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.event.before: ${{ github.event.before }}"
+          echo "github.sha: ${{ github.sha }}"
+          echo "Input iar_files_list: '${{ inputs.iar_files_list }}'"
+          echo "Input iar_directory: '${{ inputs.iar_directory }}'"
+
           IAR_FILES_TO_DEPLOY=""
 
           # Prioritize manual input for specific files (from workflow_dispatch)
           if [[ -n "${{ inputs.iar_files_list }}" ]]; then
-            echo "Manual input: Using specific .iar files from 'iar_files_list'."
+            echo "Condition: Manual input 'iar_files_list' is provided."
             IAR_FILES_TO_DEPLOY="${{ inputs.iar_files_list }}"
 
           # Second priority: Manual input for a directory (from workflow_dispatch)
           elif [[ -n "${{ inputs.iar_directory }}" ]]; then
-            echo "Manual input: Scanning directory '${{ inputs.iar_directory }}' for .iar files."
+            echo "Condition: Manual input 'iar_directory' is provided."
+            echo "Scanning directory '${{ inputs.iar_directory }}' for .iar files."
             # Use find command to get all .iar files in the specified directory.
             # -type f: only files
             # -iname "*.iar": files ending with .iar (case-insensitive)
             # -print0: null-terminated output for safety with spaces in filenames
             # xargs -0: reads null-terminated input
             # tr '\n' ',' | sed 's/,$//': converts newlines to commas and removes trailing comma
-            IAR_FILES_TO_DEPLOY=$(find "${{ inputs.iar_directory }}" -type f -iname "*.iar" -print0 | xargs -0 | tr '\n' ',' | sed 's/,$//')
+            
+            # First, check if the directory exists
+            if [[ ! -d "${{ inputs.iar_directory }}" ]]; then
+              echo "Error: Directory '${{ inputs.iar_directory }}' does not exist."
+              exit 1 # Exit with error if directory not found
+            fi
+
+            # Execute find command and capture output
+            FIND_OUTPUT=$(find "${{ inputs.iar_directory }}" -type f -iname "*.iar" -print0)
+            echo "Raw find output: '$FIND_OUTPUT'" # Debug: show raw find output
+
+            IAR_FILES_TO_DEPLOY=$(echo "$FIND_OUTPUT" | xargs -0 | tr '\n' ',' | sed 's/,$//')
 
             if [[ -z "$IAR_FILES_TO_DEPLOY" ]]; then
-              echo "No .iar files found in directory '${{ inputs.iar_directory }}'."
+              echo "No .iar files found in directory '${{ inputs.iar_directory }}' after processing."
             fi
 
           # Fallback: If no manual input, use committed files (original 'push' event logic)
           else
-            echo "No manual input provided. Detecting .iar files committed in this push."
+            echo "Condition: No manual input provided. Attempting to detect .iar files committed in this push."
             
             # This relies on fetch-depth: 0 in the checkout step.
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+            # Use --no-pager to prevent git from using a pager, which can cause issues in CI.
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} --no-pager)
+            echo "Changed files detected by git diff: '$CHANGED_FILES'" # Debug: show git diff output
 
             for file in $CHANGED_FILES; do
+              echo "Checking file: '$file'" # Debug: show each file being checked
               if [[ "${file,,}" == *.iar ]]; then # ${file,,} converts to lowercase
+                echo "Found .iar file: '$file'" # Debug: confirm .iar file found
                 if [[ -n "$IAR_FILES_TO_DEPLOY" ]]; then
                   IAR_FILES_TO_DEPLOY+=","
                 fi
                 IAR_FILES_TO_DEPLOY+="$file"
+              else
+                echo "Skipping non-.iar file: '$file'" # Debug: show skipped files
               fi
             done
 
             if [[ -z "$IAR_FILES_TO_DEPLOY" ]]; then
-              echo "No .iar files were committed in this push."
+              echo "No .iar files were committed in this push after filtering."
             fi
           fi
 
-          echo "Final list of .iar files for deployment: $IAR_FILES_TO_DEPLOY"
+          echo "Final list of .iar files for deployment: '$IAR_FILES_TO_DEPLOY'"
+          echo "--- End Debugging ---"
           
           # Set the list of .iar files as an output of this step.
           # This output can be accessed by subsequent steps using steps.get_iar_files.outputs.iar_files_to_deploy
