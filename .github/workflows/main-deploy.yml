@@ -62,7 +62,7 @@ jobs:
       target_environment: dev # Specify the target environment for the reusable workflow.
       iar_files_list: ${{ github.event.inputs.iar_files_list }} # Pass workflow_dispatch input.
       iar_directory: ${{ github.event.inputs.iar_directory }} # Pass workflow_dispatch input.
-      oic_instance_name: ${{ env.OIC_INSTANCE_NAME }} # Pass OIC_INSTANCE_NAME from workflow env
+      oic_instance_name: ${{ vars.OIC_INSTANCE_NAME }} # Corrected: Pass OIC_INSTANCE_NAME directly from vars
     
     # Pass secrets to the reusable workflow.
     # All secrets used by the reusable workflow must be explicitly passed from the calling workflow.
@@ -95,7 +95,7 @@ jobs:
       target_environment: stage # Specify the target environment for the reusable workflow.
       iar_files_list: ${{ github.event.inputs.iar_files_list }} # Pass workflow_dispatch input.
       iar_directory: ${{ github.event.inputs.iar_directory }} # Pass workflow_dispatch input.
-      oic_instance_name: ${{ env.OIC_INSTANCE_NAME }} # Pass OIC_INSTANCE_NAME from workflow env
+      oic_instance_name: ${{ vars.OIC_INSTANCE_NAME }} # Corrected: Pass OIC_INSTANCE_NAME directly from vars
     
     # Pass secrets to the reusable workflow.
     secrets:
