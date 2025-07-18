@@ -1,0 +1,77 @@
+# .github/workflows/print-variables.yml
+# This workflow can be manually triggered from the GitHub Actions UI
+# to print various GitHub Actions contexts and variables for debugging purposes.
+
+name: Print Workflow Variables (Manual)
+
+# This workflow can be triggered manually from the GitHub Actions UI.
+on:
+  workflow_dispatch:
+    # You can optionally define inputs here if you want to test passing values
+    # For example:
+    # inputs:
+    #   my_custom_input:
+    #     description: 'A custom input variable'
+    #     required: false
+    #     type: string
+
+jobs:
+  print_all_variables:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (optional, but good practice)
+        uses: actions/checkout@v4
+
+      - name: Print GitHub Context
+        run: |
+          echo "--- GitHub Context ---"
+          echo "github.event_name: ${{ github.event_name }}"
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.sha: ${{ github.sha }}"
+          echo "github.repository: ${{ github.repository }}"
+          echo "github.workflow: ${{ github.workflow }}"
+          echo "github.run_id: ${{ github.run_id }}"
+          echo "github.run_number: ${{ github.run_number }}"
+          echo "github.actor: ${{ github.actor }}"
+          echo "github.head_ref: ${{ github.head_ref }}"
+          echo "github.base_ref: ${{ github.base_ref }}"
+          echo "github.event.inputs.my_custom_input: ${{ github.event.inputs.my_custom_input }}" # If you add a custom input above
+
+      - name: Print Environment Variables
+        run: |
+          echo "--- Environment Variables (from 'env' context) ---"
+          # This will print environment variables defined at the workflow or job level
+          # For example, if you had 'env: MY_VAR: "Hello"' at the workflow level
+          echo "OIC_INSTANCE_NAME: '${{ env.OIC_INSTANCE_NAME }}'" # This will be empty if not explicitly set in this workflow's env
+
+      - name: Print Workflow Variables (from 'vars' context)
+        run: |
+          echo "--- Workflow Variables (from 'vars' context) ---"
+          # This prints variables set in your repository or organization settings under 'Variables'.
+          # Example: vars.OIC_INSTANCE_NAME
+          echo "OIC_INSTANCE_NAME from vars: '${{ vars.OIC_INSTANCE_NAME }}'"
+          echo "All vars: "
+          # Note: Directly printing all vars can be verbose. This is a conceptual example.
+          # For a real scenario, you might list specific vars or use a custom action.
+          # The following loop attempts to print all vars, but might not work in all shell environments
+          # or for all types of vars. Better to print specific ones.
+          # for var in $(compgen -v | grep GITHUB_VAR_); do echo "$var=${!var}"; done
+
+      - name: Print Secrets (will be masked)
+        run: |
+          echo "--- Secrets (from 'secrets' context - values will be masked) ---"
+          # This prints secrets set in your repository or organization settings under 'Secrets'.
+          # Their values will appear as '***' in the logs for security.
+          echo "OIC_URL: '${{ secrets.OIC_URL }}'"
+          echo "OIC_TOKEN_URL: '${{ secrets.OIC_TOKEN_URL }}'"
+          echo "OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'"
+          echo "OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'"
+          echo "OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'"
+          # You can also try to list all secrets, but their values will be masked.
+          # echo "All secrets: "
+          # for secret in $(compgen -v | grep GITHUB_SECRET_); do echo "$secret=${!secret}"; done
+
+      - name: Print Environment Variables (from shell)
+        run: |
+          echo "--- Current Shell Environment Variables ---"
+          env
