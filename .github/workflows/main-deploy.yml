@@ -36,7 +36,7 @@ on:
 # Environment variables accessible to all jobs in this workflow.
 # OIC_URL is now passed as a secret to the reusable workflow for better security.
 env:
-  OIC_INSTANCE_NAME: ${{ vars.OIC_INSTANCE_NAME }}
+  OIC_INSTANCE_NAME: '${{ vars.OIC_INSTANCE_NAME }}'
 
 jobs:
   # New job to debug the OIC_INSTANCE_NAME variable directly from the main workflow's context.
@@ -46,7 +46,7 @@ jobs:
       - name: Print OIC_INSTANCE_NAME from Workflow Variables
         run: |
           echo "Debugging OIC_INSTANCE_NAME in main workflow:"
-          echo "Value of OIC_INSTANCE_NAME from vars: ${{ vars.OIC_INSTANCE_NAME }}"
+          echo "Value of OIC_INSTANCE_NAME from vars: '${{ vars.OIC_INSTANCE_NAME }}'"
           # If this prints an empty string, the variable is not set in GitHub's repository/organization variables.
 
   # Job to build and deploy to the 'dev' environment.
@@ -54,14 +54,16 @@ jobs:
     # This job needs the DebugVariables job to complete first.
     needs: DebugVariables
     # This condition ensures the job runs only once per logical change to 'develop':
-    # - Either a merged pull request to 'develop'
+    # - If manually dispatched for 'develop'
+    # - Or a merged pull request to 'develop'
     # - Or a direct push (that is NOT a merge commit) to 'develop'
     if: |
       ${{
         github.ref == 'refs/heads/develop' &&
         (
+          github.event_name == 'workflow_dispatch' ||
           (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true) ||
-          (github.event_name == 'push' && github.event.head_commit.parents.length == 1)
+          (github.event_name == 'push' && github.event.head_commit.parents.length == 1 && !contains(github.event.head_commit.message, 'Merge pull request'))
         )
       }}
     
@@ -74,7 +76,7 @@ jobs:
       target_environment: dev # Specify the target environment for the reusable workflow.
       iar_files_list: ${{ github.event.inputs.iar_files_list }} # Pass workflow_dispatch input.
       iar_directory: ${{ github.event.inputs.iar_directory }} # Pass workflow_dispatch input.
-      oic_instance_name: ${{ secrets.OIC_INSTANCE_NAME }} # Corrected: Pass OIC_INSTANCE_NAME directly from vars
+      oic_instance_name: ${{ vars.OIC_INSTANCE_NAME }} # Pass OIC_INSTANCE_NAME directly from vars
     
     # Pass secrets to the reusable workflow.
     # All secrets used by the reusable workflow must be explicitly passed from the calling workflow.
@@ -90,14 +92,16 @@ jobs:
     # This job needs the DebugVariables job to complete first.
     needs: DebugVariables
     # This condition ensures the job runs only once per logical change to 'stage':
-    # - Either a merged pull request to 'stage'
+    # - If manually dispatched for 'stage'
+    # - Or a merged pull request to 'stage'
     # - Or a direct push (that is NOT a merge commit) to 'stage'
     if: |
       ${{
         github.ref == 'refs/heads/stage' &&
         (
+          github.event_name == 'workflow_dispatch' ||
           (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true) ||
-          (github.event_name == 'push' && github.event.head_commit.parents.length == 1)
+          (github.event_name == 'push' && github.event.head_commit.parents.length == 1 && !contains(github.event.head_commit.message, 'Merge pull request'))
         )
       }}
     
@@ -109,7 +113,7 @@ jobs:
       target_environment: stage # Specify the target environment for the reusable workflow.
       iar_files_list: ${{ github.event.inputs.iar_files_list }} # Pass workflow_dispatch input.
       iar_directory: ${{ github.event.inputs.iar_directory }} # Pass workflow_dispatch input.
-      oic_instance_name: ${{ vars.OIC_INSTANCE_NAME }} # Corrected: Pass OIC_INSTANCE_NAME directly from vars
+      oic_instance_name: ${{ vars.OIC_INSTANCE_NAME }} # Pass OIC_INSTANCE_NAME directly from vars
     
     # Pass secrets to the reusable workflow.
     secrets:
