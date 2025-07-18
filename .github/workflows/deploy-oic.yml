@@ -1,0 +1,143 @@
+# .github/workflows/deploy-oic.yml
+# This reusable workflow handles the common logic for deploying OIC integrations.
+# It can be called by other workflows to deploy to different environments.
+
+name: Deploy OIC Integrations Reusable
+
+# Define the inputs and secrets that this reusable workflow expects.
+# These will be passed from the calling workflow.
+on:
+  workflow_call:
+    inputs:
+      target_environment:
+        description: 'The target environment for deployment (e.g., dev, stage)'
+        required: true
+        type: string
+      iar_files_list:
+        description: 'Comma-separated list of .iar file paths for direct deployment.'
+        required: false
+        type: string
+      iar_directory:
+        description: 'Path to a directory containing .iar files to scan for deployment.'
+        required: false
+        type: string
+    secrets:
+      OIC_URL:
+        description: 'The base URL for the OIC instance.'
+        required: true
+      OIC_TOKEN_URL:
+        description: 'The OAuth token URL for OIC authentication.'
+        required: true
+      OIC_CLIENT_ID:
+        description: 'The OAuth client ID for OIC authentication.'
+        required: true
+      OIC_CLIENT_SECRET:
+        description: 'The OAuth client secret for OIC authentication.'
+        required: true
+      OIC_SCOPE:
+        description: 'The OAuth scope for OIC authentication.'
+        required: true
+
+jobs:
+  Deploy:
+    # The environment for this job is dynamically set based on the 'target_environment' input.
+    environment: ${{ inputs.target_environment }}
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository code.
+      # fetch-depth: 0 is crucial for 'git diff' to work correctly,
+      # as it fetches the entire history.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 2: Determine the list of .iar files to deploy.
+      # This step prioritizes manual inputs from workflow_dispatch (if provided),
+      # otherwise, it defaults to detecting changed .iar files from the push event.
+      - name: Get .iar files for deployment
+        id: get_iar_files # Assign an ID to this step to access its outputs later.
+        run: |
+          IAR_FILES_TO_DEPLOY=""
+
+          # Prioritize manual input for specific files (from workflow_dispatch)
+          if [[ -n "${{ inputs.iar_files_list }}" ]]; then
+            echo "Manual input: Using specific .iar files from 'iar_files_list'."
+            IAR_FILES_TO_DEPLOY="${{ inputs.iar_files_list }}"
+
+          # Second priority: Manual input for a directory (from workflow_dispatch)
+          elif [[ -n "${{ inputs.iar_directory }}" ]]; then
+            echo "Manual input: Scanning directory '${{ inputs.iar_directory }}' for .iar files."
+            # Use find command to get all .iar files in the specified directory.
+            # -type f: only files
+            # -iname "*.iar": files ending with .iar (case-insensitive)
+            # -print0: null-terminated output for safety with spaces in filenames
+            # xargs -0: reads null-terminated input
+            # tr '\n' ',' | sed 's/,$//': converts newlines to commas and removes trailing comma
+            IAR_FILES_TO_DEPLOY=$(find "${{ inputs.iar_directory }}" -type f -iname "*.iar" -print0 | xargs -0 | tr '\n' ',' | sed 's/,$//')
+
+            if [[ -z "$IAR_FILES_TO_DEPLOY" ]]; then
+              echo "No .iar files found in directory '${{ inputs.iar_directory }}'."
+            fi
+
+          # Fallback: If no manual input, use committed files (original 'push' event logic)
+          else
+            echo "No manual input provided. Detecting .iar files committed in this push."
+            
+            # This relies on fetch-depth: 0 in the checkout step.
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+
+            for file in $CHANGED_FILES; do
+              if [[ "${file,,}" == *.iar ]]; then # ${file,,} converts to lowercase
+                if [[ -n "$IAR_FILES_TO_DEPLOY" ]]; then
+                  IAR_FILES_TO_DEPLOY+=","
+                fi
+                IAR_FILES_TO_DEPLOY+="$file"
+              fi
+            done
+
+            if [[ -z "$IAR_FILES_TO_DEPLOY" ]]; then
+              echo "No .iar files were committed in this push."
+            fi
+          fi
+
+          echo "Final list of .iar files for deployment: $IAR_FILES_TO_DEPLOY"
+          
+          # Set the list of .iar files as an output of this step.
+          # This output can be accessed by subsequent steps using steps.get_iar_files.outputs.iar_files_to_deploy
+          echo "iar_files_to_deploy=$IAR_FILES_TO_DEPLOY" >> $GITHUB_OUTPUT
+          
+      # Step 3: Check if any .iar files were found for deployment.
+      # If no files are found, the workflow exits successfully without attempting deployment.
+      - name: Check if any .iar files were found
+        if: steps.get_iar_files.outputs.iar_files_to_deploy == ''
+        run: |
+          echo "No .iar files were found for deployment. Skipping OIC deployment."
+          exit 0 # Exit successfully if nothing to deploy
+          
+      # Step 4: Set up Python environment.
+      # This is required to run the 'deploy_v5.py' script.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+          
+      # Step 5: Install Python dependencies required by the deployment script.
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+          
+      # Step 6: Execute the Python deployment script.
+      # Environment variables for the script are populated from the secrets passed
+      # to this reusable workflow and the output from the 'get_iar_files' step.
+      - name: Deploy OIC Integrations
+        env:
+          OIC_URL: '${{ secrets.OIC_URL }}'
+          IAR_FILES: '${{ steps.get_iar_files.outputs.iar_files_to_deploy }}'
+          OIC_TOKEN_URL: '${{ secrets.OIC_TOKEN_URL }}'
+          OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'
+          OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'
+          OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
+        run: python deploy_v5.py

@@ -5,7 +5,7 @@ import sys
 import base64
 import re
 
-def get_bearer_token(token_url, client_id, client_secret, scope):``
+def get_bearer_token(token_url, client_id, client_secret, scope):
     """
     Fetches an OAuth 2.0 Bearer Token using the Client Credentials Grant type.
     """
@@ -113,22 +113,24 @@ def derive_integration_id_from_filename(filename_with_ext):
     return filename_without_ext
 
 
-def deploy_oic_integration(oic_url, bearer_token, iar_file_path, instance_name=None, enable_async_activation_mode=False):
+def deploy_oic_integration(oic_url, bearer_token, iar_file_path, instance_name=None):
     """
     Deploys a single Oracle Integration Cloud (.iar) file using a Bearer Token for authentication.
     Optionally targets a specific integration instance during import and activation,
     and uses PATCH method override for activation.
     Handles 204 No Content for import by deriving integration ID from filename.
+    If 409 Conflict is received on POST, attempts PUT to replace using the same URL.
+    Activation always uses enableAsyncActivationMode=true.
     """
 
     base_api_url = oic_url
     if not base_api_url.endswith("/ic/api/integration/v1"):
         base_api_url = os.path.join(oic_url, "ic/api/integration/v1")
 
-    import_url = f"{base_api_url}/integrations/archive"
+    target_import_put_url = f"{base_api_url}/integrations/archive"
     if instance_name:
-        import_url += f"?integrationInstance={instance_name}"
-        print(f"  Import URL modified to target instance: {instance_name}")
+        target_import_put_url += f"?integrationInstance={instance_name}"
+        print(f"  Import/PUT URL modified to target instance: {instance_name}")
 
     activate_base_url = f"{base_api_url}/integrations/{{integration_id}}"
 
@@ -141,60 +143,97 @@ def deploy_oic_integration(oic_url, bearer_token, iar_file_path, instance_name=N
 
     response = None
     integration_id = None
+    deployment_successful = False
 
     try:
         if not os.path.exists(iar_file_path):
             print(f"Error: The IAR file '{iar_file_path}' was not found. Skipping.")
             return False
 
-        print(f"  Step 1/2: Importing integration from '{os.path.basename(iar_file_path)}'...")
-        print(f"  Using Import URL: {import_url}")
+        print(f"  Step 1/2: Attempting to POST (Import) integration from '{os.path.basename(iar_file_path)}'...")
+        print(f"  Using POST Import URL: {target_import_put_url}")
         with open(iar_file_path, 'rb') as iar_file:
             files = {'file': (os.path.basename(iar_file_path), iar_file, 'application/octet-stream')}
             
-            response = requests.post(import_url, files=files, headers=common_headers, verify=True, timeout=60)
-            response.raise_for_status()
-
-        if response.status_code == 204:
-            print(f"  Import for '{os.path.basename(iar_file_path)}' returned 204 No Content (considered success).")
-            integration_id = derive_integration_id_from_filename(os.path.basename(iar_file_path))
-            
-        else:
             try:
-                import_result = response.json()
-                print(f"  Import API Response (JSON): {json.dumps(import_result, indent=2)}")
-
-                if import_result.get("status") == "SUCCESS":
-                    integration_id = import_result.get("id")
-                    if not integration_id:
-                        print("  Error: 'id' not found in import response despite 'SUCCESS' status.")
-                        integration_id = derive_integration_id_from_filename(os.path.basename(iar_file_path))
-                        print(f"  Attempting to derive ID from filename instead: '{integration_id}'")
-                        
-                        if response:
-                            print(f"  Raw Import Response Text: {response.text}")
-                    else:
-                        print(f"  Successfully imported integration. ID (CODE|VERSION): '{integration_id}'.")
+                response = requests.post(target_import_put_url, files=files, headers=common_headers, verify=True, timeout=60)
+                response.raise_for_status()
+                
+                if response.status_code == 204:
+                    print(f"  POST Import for '{os.path.basename(iar_file_path)}' returned 204 No Content (considered success).")
+                    integration_id = derive_integration_id_from_filename(os.path.basename(iar_file_path))
+                    deployment_successful = True
                 else:
-                    error_message = import_result.get('message', 'Unknown error during import.')
-                    print(f"  Error importing integration: {error_message}")
-                    if response:
-                        print(f"  Raw Import Response Text: {response.text}")
+                    import_result = response.json()
+                    print(f"  POST Import API Response (JSON): {json.dumps(import_result, indent=2)}")
+
+                    if import_result.get("status") == "SUCCESS":
+                        integration_id = import_result.get("id")
+                        if not integration_id:
+                            print("  Error: 'id' not found in POST import response despite 'SUCCESS' status.")
+                            integration_id = derive_integration_id_from_filename(os.path.basename(iar_file_path))
+                            print(f"  Attempting to derive ID from filename instead: '{integration_id}'")
+                            if response:
+                                print(f"  Raw POST Import Response Text: {response.text}")
+                        else:
+                            print(f"  Successfully imported integration via POST. ID (CODE|VERSION): '{integration_id}'.")
+                        deployment_successful = True
+                    else:
+                        error_message = import_result.get('message', 'Unknown error during POST import.')
+                        print(f"  Error POSTing import integration: {error_message}")
+                        if response:
+                            print(f"  Raw POST Import Response Text: {response.text}")
+                        return False
+            
+            except requests.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code == 409:
+                    print(f"  Conflict (409) received during POST import. Integration '{os.path.basename(iar_file_path)}' likely already exists.")
+                    
+                    print("  Attempting to PUT (Replace) the integration using the SAME URL...")
+                    print(f"  Using PUT URL: {target_import_put_url}")
+                    
+                    with open(iar_file_path, 'rb') as iar_file_for_put:
+                        files_for_put = {'file': (os.path.basename(iar_file_path), iar_file_for_put, 'application/octet-stream')}
+                        
+                        put_headers = common_headers.copy()
+
+                        put_response = requests.put(target_import_put_url, files=files_for_put, headers=put_headers, verify=True, timeout=60)
+                        put_response.raise_for_status()
+
+                    if put_response.status_code in [200, 204]:
+                        print(f"  PUT (Replace) successful for '{os.path.basename(iar_file_path)}' (Status: {put_response.status_code}).")
+                        integration_id = derive_integration_id_from_filename(os.path.basename(iar_file_path))
+                        if not integration_id:
+                            print("  Error: Could not derive integration ID from filename after successful PUT. Cannot proceed.")
+                            return False
+                        print(f"  Derived Integration ID for activation: '{integration_id}'.")
+                        deployment_successful = True
+                    else:
+                        print(f"  PUT (Replace) for '{os.path.basename(iar_file_path)}' returned unexpected status: {put_response.status_code}.")
+                        if put_response:
+                            print(f"  Raw PUT Response Text: {put_response.text}")
+                        return False
+                else:
+                    print(f"  HTTP Error during POST import: {e}")
+                    if e.response is not None:
+                        print(f"  Response Status Code: {e.response.status_code}")
+                        print(f"  Response Content: {e.response.text}")
                     return False
             except json.JSONDecodeError as e:
-                print(f"  Error: Failed to parse JSON response from OIC API (Import step). Details: {e}")
+                print(f"  Error: Failed to parse JSON response from OIC API (POST Import step). Details: {e}")
                 print(f"  Raw OIC API Response Text (on JSONDecodeError):")
-                print("  --- START RAW RESPONSE (OIC IMPORT API) ---")
+                print("  --- START RAW RESPONSE (OIC POST IMPORT API) ---")
                 if response:
                     print(response.text)
                 else:
                     print("  No response object available.")
-                print("  --- END RAW RESPONSE (OIC IMPORT API) ---")
+                print("  --- END RAW RESPONSE (OIC POST IMPORT API) ---")
                 integration_id = derive_integration_id_from_filename(os.path.basename(iar_file_path))
                 print(f"  Attempting to derive ID from filename instead due to JSON parsing error: '{integration_id}'")
+                deployment_successful = True
 
-        if not integration_id:
-            print("  Cannot proceed to activation: Integration ID could not be determined from import response or filename.")
+        if not deployment_successful or not integration_id:
+            print("  Cannot proceed to activation: Import/Replace failed or Integration ID could not be determined.")
             return False
 
         # --- Construct Activation URL with Query Parameters ---
@@ -202,8 +241,9 @@ def deploy_oic_integration(oic_url, bearer_token, iar_file_path, instance_name=N
         query_params = []
         if instance_name:
             query_params.append(f"integrationInstance={instance_name}")
-        if enable_async_activation_mode:
-            query_params.append("enableAsyncActivationMode=true")
+        
+        # Always append enableAsyncActivationMode=true
+        query_params.append("enableAsyncActivationMode=true")
         
         if query_params:
             activate_url += "?" + "&".join(query_params)
@@ -225,13 +265,11 @@ def deploy_oic_integration(oic_url, bearer_token, iar_file_path, instance_name=N
 
         response = requests.request("POST", activate_url, headers=activate_headers, json=activate_payload, verify=True, timeout=60)
         
-        # --- NEW: Consider 200 OK or specific statuses as success for Activation ---
         if response.status_code == 200:
             try:
                 activate_result = response.json()
                 print(f"  Activation API Response (JSON): {json.dumps(activate_result, indent=2)}")
                 
-                # Check for ACTIVATED or ACTIVATION_INPROGRESS
                 if activate_result.get("status") in ["ACTIVATED", "ACTIVATION_INPROGRESS"]:
                     print(f"  Integration '{integration_id}' activation initiated/completed successfully (Status 200 and '{activate_result.get('status')}').")
                     return True
@@ -251,14 +289,13 @@ def deploy_oic_integration(oic_url, bearer_token, iar_file_path, instance_name=N
                     print("  No response object available.")
                 print("  --- END RAW RESPONSE (OIC ACTIVATION API) ---")
                 print(f"  Integration '{integration_id}' activation might have succeeded (Status 200), but response was not JSON.")
-                return True # Consider 200 OK a success even if JSON is malformed
+                return True
         else:
-            response.raise_for_status() # Raise for any other non-200, non-204 status codes
+            response.raise_for_status()
             print(f"  Unexpected status code for activation: {response.status_code}. Assuming failure.")
             if response:
                 print(f"  Raw Activation Response Text: {response.text}")
             return False
-        # --- END NEW Activation Handling ---
 
     except requests.exceptions.HTTPError as e:
         print(f"  HTTP Error during deployment: {e}")
@@ -279,7 +316,7 @@ def deploy_oic_integration(oic_url, bearer_token, iar_file_path, instance_name=N
         if hasattr(e, 'response') and e.response is not None:
             print(f"Raw Response Text (on generic error): {e.response.text}")
         return False
-    except json.JSONDecodeError as e: # This should now primarily catch errors from Activation step if it returns non-JSON
+    except json.JSONDecodeError as e:
         print(f"  Error: Failed to parse JSON response from OIC API (Activation step). Details: {e}")
         print(f"  Raw OIC API Response Text (on JSONDecodeError):")
         print("  --- START RAW RESPONSE (OIC ACTIVATION API) ---")
@@ -307,12 +344,6 @@ if __name__ == "__main__":
     # Optional Integration Instance Name (used in both import and activate URLs)
     OIC_INSTANCE_NAME = os.environ.get("OIC_INSTANCE_NAME")
 
-    # Enable Async Activation Mode (boolean, e.g., "true" or "false")
-    OIC_ENABLE_ASYNC_ACTIVATION = os.environ.get("OIC_ENABLE_ASYNC_ACTIVATION", "false").lower() == "true"
-
-    # Fallback Bearer Token (for when automatic fetching fails)
-    OIC_FALLBACK_BEARER_TOKEN = os.environ.get("OIC_FALLBACK_BEARER_TOKEN")
-
 
     # --- Validate Core Configuration ---
     if not OIC_URL:
@@ -322,28 +353,16 @@ if __name__ == "__main__":
         print("Error: IAR_FILES environment variable is not set. Please provide file paths or a directory.")
         sys.exit(1)
 
-    # Validate token fetching credentials, but allow fallback
+    # Validate token fetching credentials (no fallback)
     if not all([OIC_TOKEN_URL, OIC_CLIENT_ID, OIC_CLIENT_SECRET, OIC_SCOPE]):
-        if not OIC_FALLBACK_BEARER_TOKEN:
-            print("Error: OAuth token fetching credentials (OIC_TOKEN_URL, OIC_CLIENT_ID, OIC_CLIENT_SECRET, OIC_SCOPE) are not fully set, and no OIC_FALLBACK_BEARER_TOKEN is provided.")
-            sys.exit(1)
-        else:
-            print("Warning: OAuth token fetching credentials are incomplete. Will attempt to use OIC_FALLBACK_BEARER_TOKEN if token fetching fails.")
+        print("Error: OAuth token fetching credentials (OIC_TOKEN_URL, OIC_CLIENT_ID, OIC_CLIENT_SECRET, OIC_SCOPE) are not fully set. Automatic token fetching is required.")
+        sys.exit(1)
 
     # --- Fetch Bearer Token ---
-    bearer_token = None
-    if all([OIC_TOKEN_URL, OIC_CLIENT_ID, OIC_CLIENT_SECRET, OIC_SCOPE]):
-        bearer_token = get_bearer_token(OIC_TOKEN_URL, OIC_CLIENT_ID, OIC_CLIENT_SECRET, OIC_SCOPE)
-    else:
-        print("Skipping automatic token fetching due to incomplete credentials.")
-
+    bearer_token = get_bearer_token(OIC_TOKEN_URL, OIC_CLIENT_ID, OIC_CLIENT_SECRET, OIC_SCOPE)
     if not bearer_token:
-        if OIC_FALLBACK_BEARER_TOKEN:
-            print("\nAutomatic token fetching failed or skipped. Attempting to use OIC_FALLBACK_BEARER_TOKEN.")
-            bearer_token = OIC_FALLBACK_BEARER_TOKEN
-        else:
-            print("\nFailed to obtain Bearer Token, and no fallback token provided. Exiting deployment.")
-            sys.exit(1)
+        print("\nFailed to obtain Bearer Token. Exiting deployment.")
+        sys.exit(1)
 
     # --- Determine files to deploy ---
     files_to_deploy = []
@@ -373,7 +392,7 @@ if __name__ == "__main__":
 
     for iar_file in files_to_deploy:
         file_basename = os.path.basename(iar_file)
-        success = deploy_oic_integration(OIC_URL, bearer_token, iar_file, OIC_INSTANCE_NAME, OIC_ENABLE_ASYNC_ACTIVATION)
+        success = deploy_oic_integration(OIC_URL, bearer_token, iar_file, OIC_INSTANCE_NAME)
         deployment_results[file_basename] = "SUCCESS" if success else "FAILED"
         if not success:
             overall_success = False
