@@ -4,7 +4,7 @@
 
 name: Deploy OIC Integrations - Build and Deploy
 
-# Define when this workflow should run.
+# Define when this workflow should run..
 on:
   push:
     branches:
