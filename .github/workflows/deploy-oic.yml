@@ -21,6 +21,10 @@ on:
         description: 'Path to a directory containing .iar files to scan for deployment.'
         required: false
         type: string
+      oic_instance_name: # Added OIC_INSTANCE_NAME as an input
+        description: 'The name of the OIC instance.'
+        required: true
+        type: string
     secrets:
       OIC_URL:
         description: 'The base URL for the OIC instance.'
@@ -69,6 +73,7 @@ jobs:
           echo "github.sha: '${{ github.sha }}'" # Added quotes for clarity in logs
           echo "Input iar_files_list: '${{ inputs.iar_files_list }}'"
           echo "Input iar_directory: '${{ inputs.iar_directory }}'"
+          echo "Input oic_instance_name: '${{ inputs.oic_instance_name }}'" # Debug: show OIC_INSTANCE_NAME
 
           IAR_FILES_TO_DEPLOY=""
 
@@ -165,4 +170,5 @@ jobs:
           OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'
           OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'
           OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
+          OIC_INSTANCE_NAME: '${{ inputs.oic_instance_name }}' # Use the passed input
         run: python deploy_v5.py
