@@ -36,7 +36,7 @@ on:
 # Environment variables accessible to all jobs in this workflow.
 # OIC_URL is now passed as a secret to the reusable workflow for better security.
 env:
-  OIC_INSTANCE_NAME: ${{ secrets.OIC_INSTANCE_NAME }}
+  OIC_INSTANCE_NAME: ${{ vars.OIC_INSTANCE_NAME }}
 
 jobs:
   # New job to debug the OIC_INSTANCE_NAME variable directly from the main workflow's context.
@@ -46,7 +46,7 @@ jobs:
       - name: Print OIC_INSTANCE_NAME from Workflow Variables
         run: |
           echo "Debugging OIC_INSTANCE_NAME in main workflow:"
-          echo "Value of OIC_INSTANCE_NAME from vars: ${{ secrets.OIC_INSTANCE_NAME }}"
+          echo "Value of OIC_INSTANCE_NAME from vars: ${{ vars.OIC_INSTANCE_NAME }}"
           # If this prints an empty string, the variable is not set in GitHub's repository/organization variables.
 
   # Job to build and deploy to the 'dev' environment.
