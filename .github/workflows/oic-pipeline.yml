@@ -21,6 +21,8 @@ name: Deploy OIC Integrations to Dev (Manual or Committed Files)
         type: string
 env:
   OIC_INSTANCE_NAME: '${{ vars.OIC_INSTANCE_NAME }}'
+
+jobs:  
   BuildAndDeployToDev:
     if: '${{(github.ref == ''refs/heads/develop'') }}'
     environment:
