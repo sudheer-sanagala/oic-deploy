@@ -36,7 +36,7 @@ on:
 # Environment variables accessible to all jobs in this workflow.
 # OIC_URL is now passed as a secret to the reusable workflow for better security.
 env:
-  OIC_INSTANCE_NAME: '${{ vars.OIC_INSTANCE_NAME }}'
+  OIC_INSTANCE_NAME: ${{ vars.OIC_INSTANCE_NAME }}
 
 jobs:
   # New job to debug the OIC_INSTANCE_NAME variable directly from the main workflow's context.
