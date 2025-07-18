@@ -1,51 +1,51 @@
 name: Deploy OIC Integrations to Dev (Manual or Committed Files)
-
-on:
+'on':
   push:
     branches:
-      - 'stage'
-      - 'develop'
-  workflow_dispatch: # This enables manual triggering from GitHub UI
+      - stage
+      - develop
+  workflow_dispatch:
     inputs:
       iar_files_list:
-        description: 'Comma-separated list of .iar file paths (e.g., integrations/file1.iar,integrations/file2.iar). Overrides other inputs.'
+        description: >-
+          Comma-separated list of .iar file paths (e.g.,
+          integrations/file1.iar,integrations/file2.iar). Overrides other
+          inputs.
         required: false
         type: string
       iar_directory:
-        description: 'Path to a directory containing .iar files (e.g., integrations/). Scans this directory.'
+        description: >-
+          Path to a directory containing .iar files (e.g., integrations/). Scans
+          this directory.
         required: false
         type: string
-      # You could add more inputs here, e.g., for specific OIC_INSTANCE_NAME override for manual runs
-
-
 env:
-  OIC_INSTANCE_NAME: ${{ vars.OIC_INSTANCE_NAME }}
-  
+  OIC_INSTANCE_NAME: '${{ vars.OIC_INSTANCE_NAME }}'
   BuildAndDeployToDev:
-    if: ${{(github.ref == 'refs/heads/develop') }}
+    if: '${{(github.ref == ''refs/heads/develop'') }}'
     environment:
       name: dev
-	  
-    runs-on: ubuntu-latest # GitHub-hosted runner (Linux)
-
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        # fetch-depth: 0 is crucial if the workflow might fall back to detecting committed files.
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Get .iar files for deployment
-        id: get_iar_files # Assign an ID to this step to access its outputs
-        run: |
+        id: get_iar_files
+        run: >
           IAR_FILES_TO_DEPLOY=""
 
+
           # Prioritize manual input for specific files (from workflow_dispatch)
+
           if [[ -n "${{ github.event.inputs.iar_files_list }}" ]]; then
             echo "Manual input: Using specific .iar files from 'iar_files_list'."
             IAR_FILES_TO_DEPLOY="${{ github.event.inputs.iar_files_list }}"
 
-          # Second priority: Manual input for a directory (from workflow_dispatch)
+          # Second priority: Manual input for a directory (from
+          workflow_dispatch)
+
           elif [[ -n "${{ github.event.inputs.iar_directory }}" ]]; then
             echo "Manual input: Scanning directory '${{ github.event.inputs.iar_directory }}' for .iar files."
             # Use find command to get all .iar files in the specified directory.
@@ -60,7 +60,9 @@ env:
               echo "No .iar files found in directory '${{ github.event.inputs.iar_directory }}'."
             fi
 
-          # Fallback: If no manual input, use committed files (original 'push' event logic)
+          # Fallback: If no manual input, use committed files (original 'push'
+          event logic)
+
           else
             echo "No manual input provided. Detecting .iar files committed in this push."
             # This relies on fetch-depth: 0 in the checkout step.
@@ -80,70 +82,63 @@ env:
             fi
           fi
 
+
           echo "Final list of .iar files for deployment: $IAR_FILES_TO_DEPLOY"
+
           # Set the list of .iar files as an output of this step.
+
           echo "iar_files_to_deploy=$IAR_FILES_TO_DEPLOY" >> $GITHUB_OUTPUT
-
       - name: Check if any .iar files were found
-        # This step conditionally runs based on whether any .iar files were detected.
-        # If no .iar files, the workflow will succeed without attempting deployment.
         if: steps.get_iar_files.outputs.iar_files_to_deploy == ''
-        run: |
-          echo "No .iar files were found for deployment. Skipping OIC deployment."
-          exit 0 # Exit successfully if nothing to deploy
+        run: >
+          echo "No .iar files were found for deployment. Skipping OIC
+          deployment."
 
+          exit 0 # Exit successfully if nothing to deploy
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
-
+          python-version: 3.x
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests
-
       - name: Deploy OIC Integrations
         env:
-          OIC_URL: ${{ secrets.OIC_URL }}
-          # Pass the dynamically determined comma-separated list of .iar files.
-          IAR_FILES: ${{ steps.get_iar_files.outputs.iar_files_to_deploy }}
-          OIC_TOKEN_URL: ${{ secrets.OIC_TOKEN_URL }}
-          OIC_CLIENT_ID: ${{ secrets.OIC_CLIENT_ID }}
-          OIC_CLIENT_SECRET: ${{ secrets.OIC_CLIENT_SECRET }}
-          OIC_SCOPE: ${{ secrets.OIC_SCOPE }}
-          OIC_ENABLE_ASYNC_ACTIVATION: ${{ secrets.OIC_ENABLE_ASYNC_ACTIVATION }}
-          OIC_FALLBACK_BEARER_TOKEN: ${{ secrets.OIC_FALLBACK_BEARER_TOKEN }}
+          OIC_URL: '${{ secrets.OIC_URL }}'
+          IAR_FILES: '${{ steps.get_iar_files.outputs.iar_files_to_deploy }}'
+          OIC_TOKEN_URL: '${{ secrets.OIC_TOKEN_URL }}'
+          OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'
+          OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'
+          OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
+          OIC_ENABLE_ASYNC_ACTIVATION: '${{ secrets.OIC_ENABLE_ASYNC_ACTIVATION }}'
+          OIC_FALLBACK_BEARER_TOKEN: '${{ secrets.OIC_FALLBACK_BEARER_TOKEN }}'
         run: python deploy_v3.py
-        # Adjust the path to your script if it's not in the root of the repository.
-        # e.g., run: python scripts/deploy_oic_integration.py
-		
-		
-		
   BuildAndDeployToStage:
-    if: ${{(github.ref == 'refs/heads/stage') }}
+    if: '${{(github.ref == ''refs/heads/stage'') }}'
     environment:
       name: stage
-	  
-    runs-on: ubuntu-latest # GitHub-hosted runner (Linux)
-
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        # fetch-depth: 0 is crucial if the workflow might fall back to detecting committed files.
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Get .iar files for deployment
-        id: get_iar_files # Assign an ID to this step to access its outputs
-        run: |
+        id: get_iar_files
+        run: >
           IAR_FILES_TO_DEPLOY=""
 
+
           # Prioritize manual input for specific files (from workflow_dispatch)
+
           if [[ -n "${{ github.event.inputs.iar_files_list }}" ]]; then
             echo "Manual input: Using specific .iar files from 'iar_files_list'."
             IAR_FILES_TO_DEPLOY="${{ github.event.inputs.iar_files_list }}"
 
-          # Second priority: Manual input for a directory (from workflow_dispatch)
+          # Second priority: Manual input for a directory (from
+          workflow_dispatch)
+
           elif [[ -n "${{ github.event.inputs.iar_directory }}" ]]; then
             echo "Manual input: Scanning directory '${{ github.event.inputs.iar_directory }}' for .iar files."
             # Use find command to get all .iar files in the specified directory.
@@ -158,7 +153,9 @@ env:
               echo "No .iar files found in directory '${{ github.event.inputs.iar_directory }}'."
             fi
 
-          # Fallback: If no manual input, use committed files (original 'push' event logic)
+          # Fallback: If no manual input, use committed files (original 'push'
+          event logic)
+
           else
             echo "No manual input provided. Detecting .iar files committed in this push."
             # This relies on fetch-depth: 0 in the checkout step.
@@ -178,39 +175,35 @@ env:
             fi
           fi
 
+
           echo "Final list of .iar files for deployment: $IAR_FILES_TO_DEPLOY"
+
           # Set the list of .iar files as an output of this step.
+
           echo "iar_files_to_deploy=$IAR_FILES_TO_DEPLOY" >> $GITHUB_OUTPUT
-
       - name: Check if any .iar files were found
-        # This step conditionally runs based on whether any .iar files were detected.
-        # If no .iar files, the workflow will succeed without attempting deployment.
         if: steps.get_iar_files.outputs.iar_files_to_deploy == ''
-        run: |
-          echo "No .iar files were found for deployment. Skipping OIC deployment."
-          exit 0 # Exit successfully if nothing to deploy
+        run: >
+          echo "No .iar files were found for deployment. Skipping OIC
+          deployment."
 
+          exit 0 # Exit successfully if nothing to deploy
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
-
+          python-version: 3.x
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests
-
       - name: Deploy OIC Integrations
         env:
-          OIC_URL: ${{ secrets.OIC_URL }}
-          # Pass the dynamically determined comma-separated list of .iar files.
-          IAR_FILES: ${{ steps.get_iar_files.outputs.iar_files_to_deploy }}
-          OIC_TOKEN_URL: ${{ secrets.OIC_TOKEN_URL }}
-          OIC_CLIENT_ID: ${{ secrets.OIC_CLIENT_ID }}
-          OIC_CLIENT_SECRET: ${{ secrets.OIC_CLIENT_SECRET }}
-          OIC_SCOPE: ${{ secrets.OIC_SCOPE }}
-          OIC_ENABLE_ASYNC_ACTIVATION: ${{ secrets.OIC_ENABLE_ASYNC_ACTIVATION }}
-          OIC_FALLBACK_BEARER_TOKEN: ${{ secrets.OIC_FALLBACK_BEARER_TOKEN }}
+          OIC_URL: '${{ secrets.OIC_URL }}'
+          IAR_FILES: '${{ steps.get_iar_files.outputs.iar_files_to_deploy }}'
+          OIC_TOKEN_URL: '${{ secrets.OIC_TOKEN_URL }}'
+          OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'
+          OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'
+          OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
+          OIC_ENABLE_ASYNC_ACTIVATION: '${{ secrets.OIC_ENABLE_ASYNC_ACTIVATION }}'
+          OIC_FALLBACK_BEARER_TOKEN: '${{ secrets.OIC_FALLBACK_BEARER_TOKEN }}'
         run: python deploy_v3.py
-        # Adjust the path to your script if it's not in the root of the repository.
-        # e.g., run: python scripts/deploy_oic_integration.py
