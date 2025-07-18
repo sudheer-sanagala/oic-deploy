@@ -46,7 +46,7 @@ jobs:
       - name: Print OIC_INSTANCE_NAME from Workflow Variables
         run: |
           echo "Debugging OIC_INSTANCE_NAME in main workflow:"
-          echo "Value of OIC_INSTANCE_NAME from vars: '${{ vars.OIC_INSTANCE_NAME }}'"
+          echo "Value of OIC_INSTANCE_NAME from vars: ${{ vars.OIC_INSTANCE_NAME }}"
           # If this prints an empty string, the variable is not set in GitHub's repository/organization variables.
 
   # Job to build and deploy to the 'dev' environment.
