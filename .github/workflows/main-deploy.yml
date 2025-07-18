@@ -2,7 +2,7 @@
 # This workflow orchestrates the deployment of OIC Integrations to different environments.
 # It now leverages a reusable workflow to avoid code duplication.
 
-name: MAIN: Deploy OIC Integrations - Build and Deploy
+name: MAIN Deploy OIC Integrations - Build and Deploy
 
 # Define when this workflow should run.
 on:
