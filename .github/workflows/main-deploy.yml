@@ -73,6 +73,10 @@ jobs:
       OIC_CLIENT_SECRET: ${{ secrets.OIC_CLIENT_SECRET }}
       OIC_SCOPE: ${{ secrets.OIC_SCOPE }}
 
+    steps: # Added steps section for this job
+      - name: Print OIC_INSTANCE_NAME (Main Workflow)
+        run: echo "OIC_INSTANCE_NAME in main workflow (dev job): ${{ env.OIC_INSTANCE_NAME }}"
+
   # Job to build and deploy to the 'stage' environment.
   BuildAndDeployToStage:
     # This condition ensures the job runs only once per logical change to 'stage':
@@ -104,3 +108,7 @@ jobs:
       OIC_CLIENT_ID: ${{ secrets.OIC_CLIENT_ID }}
       OIC_CLIENT_SECRET: ${{ secrets.OIC_CLIENT_SECRET }}
       OIC_SCOPE: ${{ secrets.OIC_SCOPE }}
+
+    steps: # Added steps section for this job
+      - name: Print OIC_INSTANCE_NAME (Main Workflow)
+        run: echo "OIC_INSTANCE_NAME in main workflow (stage job): ${{ env.OIC_INSTANCE_NAME }}"

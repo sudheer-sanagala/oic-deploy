@@ -159,13 +159,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      # Step 6: Debug OIC_INSTANCE_NAME before running the Python script
+      # Step 6: Debug OIC_INSTANCE_NAME and make it available as an environment variable
       - name: Debug OIC_INSTANCE_NAME in reusable workflow
         run: |
           echo "OIC_INSTANCE_NAME received in reusable workflow: ${{ inputs.oic_instance_name }}"
           # This will make OIC_INSTANCE_NAME available as an environment variable
           # for the next step (Deploy OIC Integrations).
-          echo "OIC_INSTANCE_NAME=${{ inputs.oic_instance_name }}" >> $GITHUB_ENV
+          echo "OIC_INSTANCE_NAME=${{ inputs.oic_instance_name }}" >> $GITHUB_ENV # Corrected line
           
       # Step 7: Execute the Python deployment script.
       # Environment variables for the script are populated from the secrets passed
