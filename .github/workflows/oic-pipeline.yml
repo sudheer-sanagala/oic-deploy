@@ -106,7 +106,7 @@ env:
       - name: Deploy OIC Integrations
         env:
           OIC_URL: '${{ secrets.OIC_URL }}'
-          IAR_FILES: '${{ steps.get_iar_files.outputs.iar_files_to_deploy }}'
+          #IAR_FILES: '${{ steps.get_iar_files.outputs.iar_files_to_deploy }}'
           OIC_TOKEN_URL: '${{ secrets.OIC_TOKEN_URL }}'
           OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'
           OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'
@@ -114,6 +114,7 @@ env:
           OIC_ENABLE_ASYNC_ACTIVATION: '${{ secrets.OIC_ENABLE_ASYNC_ACTIVATION }}'
           OIC_FALLBACK_BEARER_TOKEN: '${{ secrets.OIC_FALLBACK_BEARER_TOKEN }}'
         run: python deploy_v3.py
+        
   BuildAndDeployToStage:
     if: '${{(github.ref == ''refs/heads/stage'') }}'
     environment:

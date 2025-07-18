@@ -98,7 +98,7 @@ jobs:
         env:
           OIC_URL: ${{ secrets.OIC_URL }}
           # Pass the dynamically determined comma-separated list of .iar files.
-          #IAR_FILES: ${{ steps.get_iar_files.outputs.iar_files_to_deploy }}
+          IAR_FILES: ${{ steps.get_iar_files.outputs.iar_files_to_deploy }}
           OIC_TOKEN_URL: ${{ secrets.OIC_TOKEN_URL }}
           OIC_CLIENT_ID: ${{ secrets.OIC_CLIENT_ID }}
           OIC_CLIENT_SECRET: ${{ secrets.OIC_CLIENT_SECRET }}
