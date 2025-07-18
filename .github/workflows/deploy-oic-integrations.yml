@@ -1,4 +1,4 @@
-name: Deploy OIC Integrations - Build and Deploy
+name: V1 Deploy OIC Integrations - Build and Deploy
 
 on:
   push:
