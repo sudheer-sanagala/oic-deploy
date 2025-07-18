@@ -2,7 +2,7 @@
 # This workflow orchestrates the deployment of OIC Integrations to different environments.
 # It now leverages a reusable workflow to avoid code duplication.
 
-name: MAIN Deploy OIC Integrations - Build and Deploy
+name: Deploy OIC Integrations - Build and Deploy
 
 # Define when this workflow should run.
 on:
@@ -41,9 +41,17 @@ env:
 jobs:
   # Job to build and deploy to the 'dev' environment.
   BuildAndDeployToDev:
-    # This job runs if the current branch is 'develop' AND
-    # it's either a pull request event OR a push event that is NOT a merge commit.
-    if: ${{(github.ref == 'refs/heads/develop') && ((github.event_name == 'pull_request') || (github.event_name == 'push' && !contains( github.event.head_commit.message, 'Merge pull request')))}}
+    # This condition ensures the job runs only once per logical change to 'develop':
+    # - Either a merged pull request to 'develop'
+    # - Or a direct push (that is NOT a merge commit) to 'develop'
+    if: |
+      ${{
+        github.ref == 'refs/heads/develop' &&
+        (
+          (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true) ||
+          (github.event_name == 'push' && github.event.head_commit.parents.length == 1)
+        )
+      }}
     
     # Call the reusable workflow for deployment.
     # The 'uses' keyword points to the path of the reusable workflow file.
@@ -66,9 +74,17 @@ jobs:
 
   # Job to build and deploy to the 'stage' environment.
   BuildAndDeployToStage:
-    # This job runs if the current branch is 'stage' AND
-    # it's either a pull request event OR a push event that is NOT a merge commit.
-    if: ${{(github.ref == 'refs/heads/stage') && ((github.event_name == 'pull_request') || (github.event_name == 'push' && !contains( github.event.head_commit.message, 'Merge pull request')))}}
+    # This condition ensures the job runs only once per logical change to 'stage':
+    # - Either a merged pull request to 'stage'
+    # - Or a direct push (that is NOT a merge commit) to 'stage'
+    if: |
+      ${{
+        github.ref == 'refs/heads/stage' &&
+        (
+          (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true) ||
+          (github.event_name == 'push' && github.event.head_commit.parents.length == 1)
+        )
+      }}
     
     # Call the reusable workflow for deployment.
     uses: ./.github/workflows/deploy-oic.yml
