@@ -2,7 +2,7 @@
 # This reusable workflow handles the common logic for deploying OIC integrations.
 # It can be called by other workflows to deploy to different environments.
 
-name: Deploy OIC Integrations Reusable
+name: CHILD: Deploy OIC Integrations Reusable
 
 # Define the inputs and secrets that this reusable workflow expects.
 # These will be passed from the calling workflow.
