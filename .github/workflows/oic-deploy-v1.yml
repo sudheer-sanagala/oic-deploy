@@ -1,0 +1,123 @@
+name: v5 OIC Deploy (Committed Files)
+on:
+  push:
+    branches:
+      - stage
+      - develop
+env:
+  OIC_INSTANCE_NAME: '${{ vars.OIC_INSTANCE_NAME }}'
+
+jobs:
+  BuildAndDeployToDev:
+    if: '${{(github.ref == ''refs/heads/develop'') }}'
+    environment:
+      name: dev
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get .iar files for deployment
+        id: get_iar_files
+        run: |
+          IAR_FILES_TO_DEPLOY=""
+          echo "Detecting .iar files committed in this push."
+          # This relies on fetch-depth: 0 in the checkout step.
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+
+          for file in $CHANGED_FILES; do
+            if [[ "${file,,}" == *.iar ]]; then # ${file,,} converts to lowercase
+              if [[ -n "$IAR_FILES_TO_DEPLOY" ]]; then
+                IAR_FILES_TO_DEPLOY+=","
+              fi
+              IAR_FILES_TO_DEPLOY+="$file"
+            fi
+          done
+
+          if [[ -z "$IAR_FILES_TO_DEPLOY" ]]; then
+            echo "No .iar files were committed in this push."
+          fi
+
+          echo "Final list of .iar files for deployment: $IAR_FILES_TO_DEPLOY"
+          # Set the list of .iar files as an output of this step.
+          echo "iar_files_to_deploy=$IAR_FILES_TO_DEPLOY" >> $GITHUB_OUTPUT
+      - name: Check if any .iar files were found
+        if: steps.get_iar_files.outputs.iar_files_to_deploy == ''
+        run: |
+          echo "No .iar files were found for deployment. Skipping OIC deployment."
+          exit 0 # Exit successfully if nothing to deploy
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+      - name: Deploy OIC Integrations
+        env:
+          OIC_URL: '${{ secrets.OIC_URL }}'
+          IAR_FILES: '${{ steps.get_iar_files.outputs.iar_files_to_deploy }}'
+          OIC_TOKEN_URL: '${{ secrets.OIC_TOKEN_URL }}'
+          OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'
+          OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'
+          OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
+        run: python deploy_v5.py
+
+  BuildAndDeployToStage:
+    if: '${{(github.ref == ''refs/heads/stage'') }}'
+    environment:
+      name: stage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get .iar files for deployment
+        id: get_iar_files
+        run: |
+          IAR_FILES_TO_DEPLOY=""
+          echo "Detecting .iar files committed in this push."
+          # This relies on fetch-depth: 0 in the checkout step.
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+
+          for file in $CHANGED_FILES; do
+            if [[ "${file,,}" == *.iar ]]; then # ${file,,} converts to lowercase
+              if [[ -n "$IAR_FILES_TO_DEPLOY" ]]; then
+                IAR_FILES_TO_DEPLOY+=","
+              fi
+              IAR_FILES_TO_DEPLOY+="$file"
+            fi
+          done
+
+          if [[ -z "$IAR_FILES_TO_DEPLOY" ]]; then
+            echo "No .iar files were committed in this push."
+          fi
+
+          echo "Final list of .iar files for deployment: $IAR_FILES_TO_DEPLOY"
+          # Set the list of .iar files as an output of this step.
+          echo "iar_files_to_deploy=$IAR_FILES_TO_DEPLOY" >> $GITHUB_OUTPUT
+      - name: Check if any .iar files were found
+        if: steps.get_iar_files.outputs.iar_files_to_deploy == ''
+        run: |
+          echo "No .iar files were found for deployment. Skipping OIC deployment."
+          exit 0 # Exit successfully if nothing to deploy
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+      - name: Deploy OIC Integrations
+        env:
+          OIC_URL: '${{ secrets.OIC_URL }}'
+          IAR_FILES: '${{ steps.get_iar_files.outputs.iar_files_to_deploy }}'
+          OIC_TOKEN_URL: '${{ secrets.OIC_TOKEN_URL }}'
+          OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'
+          OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'
+          OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
+        run: python deploy_v5.py

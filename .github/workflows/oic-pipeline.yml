@@ -45,8 +45,7 @@ jobs:
             echo "Manual input: Using specific .iar files from 'iar_files_list'."
             IAR_FILES_TO_DEPLOY="${{ github.event.inputs.iar_files_list }}"
 
-          # Second priority: Manual input for a directory (from
-          workflow_dispatch)
+          # Second priority: Manual input for a directory (from workflow_dispatch)
 
           elif [[ -n "${{ github.event.inputs.iar_directory }}" ]]; then
             echo "Manual input: Scanning directory '${{ github.event.inputs.iar_directory }}' for .iar files."
@@ -62,8 +61,7 @@ jobs:
               echo "No .iar files found in directory '${{ github.event.inputs.iar_directory }}'."
             fi
 
-          # Fallback: If no manual input, use committed files (original 'push'
-          event logic)
+          # Fallback: If no manual input, use committed files (original 'push' event logic)
 
           else
             echo "No manual input provided. Detecting .iar files committed in this push."
@@ -113,8 +111,6 @@ jobs:
           OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'
           OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'
           OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
-          OIC_ENABLE_ASYNC_ACTIVATION: '${{ secrets.OIC_ENABLE_ASYNC_ACTIVATION }}'
-          OIC_FALLBACK_BEARER_TOKEN: '${{ secrets.OIC_FALLBACK_BEARER_TOKEN }}'
         run: python deploy_v5.py
         
   BuildAndDeployToStage:
@@ -207,6 +203,4 @@ jobs:
           OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'
           OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'
           OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
-          OIC_ENABLE_ASYNC_ACTIVATION: '${{ secrets.OIC_ENABLE_ASYNC_ACTIVATION }}'
-          OIC_FALLBACK_BEARER_TOKEN: '${{ secrets.OIC_FALLBACK_BEARER_TOKEN }}'
         run: python deploy_v5.py
