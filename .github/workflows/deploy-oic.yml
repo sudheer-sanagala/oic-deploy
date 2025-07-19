@@ -1,0 +1,182 @@
+# .github/workflows/deploy-oic.yml
+# This reusable workflow handles the common logic for deploying OIC integrations.
+# It can be called by other workflows to deploy to different environments.
+
+name: Deploy OIC Integrations Reusable
+
+# Define the inputs and secrets that this reusable workflow expects.
+# These will be passed from the calling workflow.
+on:
+  workflow_call:
+    inputs:
+      target_environment:
+        description: 'The target environment for deployment (e.g., dev, stage)'
+        required: true
+        type: string
+      iar_files_list:
+        description: 'Comma-separated list of .iar file paths for direct deployment.'
+        required: false
+        type: string
+      iar_directory:
+        description: 'Path to a directory containing .iar files to scan for deployment.'
+        required: false
+        type: string
+      oic_instance_name: # Added OIC_INSTANCE_NAME as an input
+        description: 'The name of the OIC instance.'
+        required: true
+        type: string
+    secrets:
+      OIC_URL:
+        description: 'The base URL for the OIC instance.'
+        required: true
+      OIC_TOKEN_URL:
+        description: 'The OAuth token URL for OIC authentication.'
+        required: true
+      OIC_CLIENT_ID:
+        description: 'The OAuth client ID for OIC authentication.'
+        required: true
+      OIC_CLIENT_SECRET:
+        description: 'The OAuth client secret for OIC authentication.'
+        required: true
+      OIC_SCOPE:
+        description: 'The OAuth scope for OIC authentication.'
+        required: true
+
+jobs:
+  Deploy:
+    # The environment for this job is dynamically set based on the 'target_environment' input.
+    environment: ${{ inputs.target_environment }}
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository code.
+      # fetch-depth: 0 is crucial for 'git diff' to work correctly,
+      # as it fetches the entire history.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 2: Determine the list of .iar files to deploy.
+      # This step prioritizes manual inputs from workflow_dispatch (if provided),
+      # otherwise, it defaults to detecting changed .iar files from the push event.
+      - name: Get .iar files for deployment
+        id: get_iar_files # Assign an ID to this step to access its outputs later.
+        run: |
+          # Enable shell debugging to see executed commands
+          set -x
+
+          echo "--- Debugging .iar file detection ---"
+          echo "github.event_name: ${{ github.event_name }}"
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.event.before: '${{ github.event.before }}'" # Added quotes for clarity in logs
+          echo "github.sha: '${{ github.sha }}'" # Added quotes for clarity in logs
+          echo "Input iar_files_list: '${{ inputs.iar_files_list }}'"
+          echo "Input iar_directory: '${{ inputs.iar_directory }}'"
+          echo "Input oic_instance_name: '${{ inputs.oic_instance_name }}'" # Debug: show OIC_INSTANCE_NAME
+
+          IAR_FILES_TO_DEPLOY=""
+
+          # Prioritize manual input for specific files (from workflow_dispatch)
+          if [[ -n "${{ inputs.iar_files_list }}" ]]; then
+            echo "Condition: Manual input 'iar_files_list' is provided."
+            IAR_FILES_TO_DEPLOY="${{ inputs.iar_files_list }}"
+
+          # Second priority: Manual input for a directory (from workflow_dispatch)
+          elif [[ -n "${{ inputs.iar_directory }}" ]]; then
+            echo "Condition: Manual input 'iar_directory' is provided."
+            echo "Scanning directory '${{ inputs.iar_directory }}' for .iar files."
+            
+            # First, check if the directory exists
+            if [[ ! -d "${{ inputs.iar_directory }}" ]]; then
+              echo "Error: Directory '${{ inputs.iar_directory }}' does not exist."
+              exit 1 # Exit with error if directory not found
+            fi
+
+            # Execute find command and capture output
+            FIND_OUTPUT=$(find "${{ inputs.iar_directory }}" -type f -iname "*.iar" -print0)
+            echo "Raw find output: '$FIND_OUTPUT'" # Debug: show raw find output
+
+            IAR_FILES_TO_DEPLOY=$(echo "$FIND_OUTPUT" | xargs -0 | tr '\n' ',' | sed 's/,$//')
+
+            if [[ -z "$IAR_FILES_TO_DEPLOY" ]]; then
+              echo "No .iar files found in directory '${{ inputs.iar_directory }}' after processing."
+            fi
+
+          # Fallback: If no manual input, use committed files (original 'push' event logic)
+          else
+            echo "Condition: No manual input provided. Attempting to detect .iar files from the current push."
+            
+            # Use git show to get files changed by the current commit (github.sha).
+            # --name-only: show only names of changed files.
+            # --pretty="": suppress commit message and other info.
+            # This is more robust for push events, especially non-merge commits.
+            CHANGED_FILES=$(git show --name-only --pretty="" ${{ github.sha }})
+            echo "Files changed by current commit (${{ github.sha }}): '$CHANGED_FILES'" # Debug: show git show output
+
+            for file in $CHANGED_FILES; do
+              echo "Checking file: '$file'" # Debug: show each file being checked
+              if [[ "${file,,}" == *.iar ]]; then # ${file,,} converts to lowercase
+                echo "Found .iar file: '$file'" # Debug: confirm .iar file found
+                if [[ -n "$IAR_FILES_TO_DEPLOY" ]]; then
+                  IAR_FILES_TO_DEPLOY+=","
+                fi
+                IAR_FILES_TO_DEPLOY+="$file"
+              else
+                echo "Skipping non-.iar file: '$file'" # Debug: show skipped files
+              fi
+            done
+
+            if [[ -z "$IAR_FILES_TO_DEPLOY" ]]; then
+              echo "No .iar files were found in the current commit after filtering."
+            fi
+          fi
+
+          echo "Final list of .iar files for deployment: '$IAR_FILES_TO_DEPLOY'"
+          echo "--- End Debugging ---"
+          
+          # Set the list of .iar files as an output of this step.
+          echo "iar_files_to_deploy=$IAR_FILES_TO_DEPLOY" >> $GITHUB_OUTPUT
+          
+      # Step 3: Check if any .iar files were found for deployment.
+      # If no files are found, the workflow exits successfully without attempting deployment.
+      - name: Check if any .iar files were found
+        if: steps.get_iar_files.outputs.iar_files_to_deploy == ''
+        run: |
+          echo "No .iar files were found for deployment. Skipping OIC deployment."
+          exit 0 # Exit successfully if nothing to deploy
+          
+      # Step 4: Set up Python environment.
+      # This is required to run the 'deploy_v5.py' script.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+          
+      # Step 5: Install Python dependencies required by the deployment script.
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      # Step 6: Debug OIC_INSTANCE_NAME and make it available as an environment variable
+      - name: Debug OIC_INSTANCE_NAME in reusable workflow
+        run: |
+          echo "OIC_INSTANCE_NAME received in reusable workflow: ${{ inputs.oic_instance_name }}"
+          # This will make OIC_INSTANCE_NAME available as an environment variable
+          # for the next step (Deploy OIC Integrations).
+          echo "OIC_INSTANCE_NAME=${{ inputs.oic_instance_name }}" >> $GITHUB_ENV # Corrected line
+          
+      # Step 7: Execute the Python deployment script.
+      # Environment variables for the script are populated from the secrets passed
+      # to this reusable workflow and the output from the 'get_iar_files' step.
+      - name: Deploy OIC Integrations
+        env:
+          OIC_URL: '${{ secrets.OIC_URL }}'
+          IAR_FILES: '${{ steps.get_iar_files.outputs.iar_files_to_deploy }}'
+          OIC_TOKEN_URL: '${{ secrets.OIC_TOKEN_URL }}'
+          OIC_CLIENT_ID: '${{ secrets.OIC_CLIENT_ID }}'
+          OIC_CLIENT_SECRET: '${{ secrets.OIC_CLIENT_SECRET }}'
+          OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
+          # OIC_INSTANCE_NAME is now set via GITHUB_ENV in the previous step
+        run: python deploy_v5.py
