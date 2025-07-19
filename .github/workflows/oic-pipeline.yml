@@ -1,4 +1,4 @@
-name: Deploy OIC Integrations to Dev (Manual or Committed Files)
+name: v5 Sudheer (Manual or Committed Files)
 'on':
   push:
     branches:
