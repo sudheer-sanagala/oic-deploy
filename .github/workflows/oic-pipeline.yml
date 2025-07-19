@@ -115,7 +115,7 @@ jobs:
           OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
           OIC_ENABLE_ASYNC_ACTIVATION: '${{ secrets.OIC_ENABLE_ASYNC_ACTIVATION }}'
           OIC_FALLBACK_BEARER_TOKEN: '${{ secrets.OIC_FALLBACK_BEARER_TOKEN }}'
-        run: python deploy_v3.py
+        run: python deploy_v5.py
         
   BuildAndDeployToStage:
     if: '${{(github.ref == ''refs/heads/stage'') }}'
@@ -209,4 +209,4 @@ jobs:
           OIC_SCOPE: '${{ secrets.OIC_SCOPE }}'
           OIC_ENABLE_ASYNC_ACTIVATION: '${{ secrets.OIC_ENABLE_ASYNC_ACTIVATION }}'
           OIC_FALLBACK_BEARER_TOKEN: '${{ secrets.OIC_FALLBACK_BEARER_TOKEN }}'
-        run: python deploy_v3.py
+        run: python deploy_v5.py
